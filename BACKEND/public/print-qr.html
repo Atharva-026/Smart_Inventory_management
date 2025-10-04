@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print QR Codes - Smart Inventory</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .login-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #fff3cd;
+            border-radius: 8px;
+            border: 1px solid #ffc107;
+        }
+        .login-section.success {
+            background: #d4edda;
+            border-color: #28a745;
+        }
+        .input-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #2196F3;
+        }
+        .btn-secondary:hover {
+            background: #0b7dda;
+        }
+        .btn-danger {
+            background: #f44336;
+        }
+        .btn-danger:hover {
+            background: #da190b;
+        }
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        .qr-card {
+            border: 2px solid #333;
+            padding: 20px;
+            text-align: center;
+            background: white;
+            border-radius: 8px;
+            page-break-inside: avoid;
+        }
+        .qr-card img {
+            width: 200px;
+            height: 200px;
+            margin: 10px auto;
+        }
+        .qr-card h3 {
+            margin: 10px 0 5px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        .qr-card p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .hidden {
+            display: none;
+        }
+        @media print {
+            body {
+                background: white;
+            }
+            .container {
+                box-shadow: none;
+            }
+            .login-section, .input-section, button {
+                display: none;
+            }
+            .qr-card {
+                border: 2px solid #000;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Smart Inventory - QR Code Generator</h1>
+        
+        <!-- Login Section -->
+        <div id="loginSection" class="login-section">
+            <h2>🔐 Admin Login Required</h2>
+            <div class="input-group">
+                <label>Email:</label>
+                <input type="email" id="loginEmail" placeholder="admin@example.com">
+            </div>
+            <div class="input-group">
+                <label>Password:</label>
+                <input type="password" id="loginPassword" placeholder="Enter password">
+            </div>
+            <button onclick="login()">Login</button>
+            <p id="loginError" style="color: red; margin-top: 10px;"></p>
+        </div>
+
+        <!-- Token Status -->
+        <div id="tokenStatus" class="login-section success hidden">
+            <p>✅ Logged in as: <strong id="userName"></strong> (<span id="userRole"></span>)</p>
+            <button class="btn-danger" onclick="logout()">Logout</button>
+        </div>
+
+        <!-- QR Generator Section -->
+        <div id="generatorSection" class="input-section hidden">
+            <h2>Generate Single QR Code</h2>
+            <div class="input-group">
+                <label>Item Code (e.g., TOOL001):</label>
+                <input type="text" id="itemCode" placeholder="Enter unique item code">
+            </div>
+            <div class="input-group">
+                <label>Item Name (e.g., Hammer):</label>
+                <input type="text" id="itemName" placeholder="Enter item name">
+            </div>
+            <button onclick="generateSingle()">Generate QR Code</button>
+            <button class="btn-secondary" onclick="printQR()">Print All QR Codes</button>
+            <button class="btn-danger" onclick="clearAll()">Clear All</button>
+        </div>
+
+        <div id="qrGrid" class="qr-grid"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+        let authToken = localStorage.getItem('adminToken');
+        let userData = JSON.parse(localStorage.getItem('userData') || '{}');
+
+        // Check if already logged in
+        if (authToken && userData.name) {
+            showLoggedIn();
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            const errorEl = document.getElementById('loginError');
+
+            if (!email || !password) {
+                errorEl.textContent = 'Please enter both email and password';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.user.role !== 'admin') {
+                        errorEl.textContent = 'Access denied. Admin role required.';
+                        return;
+                    }
+
+                    authToken = data.token;
+                    userData = data.user;
+                    localStorage.setItem('adminToken', authToken);
+                    localStorage.setItem('userData', JSON.stringify(userData));
+                    
+                    errorEl.textContent = '';
+                    showLoggedIn();
+                } else {
+                    errorEl.textContent = data.message || 'Login failed';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorEl.textContent = 'Connection error. Make sure backend is running.';
+            }
+        }
+
+        function showLoggedIn() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('tokenStatus').classList.remove('hidden');
+            document.getElementById('generatorSection').classList.remove('hidden');
+            document.getElementById('userName').textContent = userData.name;
+            document.getElementById('userRole').textContent = userData.role;
+        }
+
+        function logout() {
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('userData');
+            authToken = null;
+            userData = {};
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('tokenStatus').classList.add('hidden');
+            document.getElementById('generatorSection').classList.add('hidden');
+            document.getElementById('qrGrid').innerHTML = '';
+        }
+
+        async function generateSingle() {
+            const itemCode = document.getElementById('itemCode').value.trim();
+            const itemName = document.getElementById('itemName').value.trim();
+
+            if (!itemCode) {
+                alert('Please enter an item code');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/qr/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ itemCode, itemName })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addQRToGrid(data.itemCode, data.itemName, data.qrImage);
+                    document.getElementById('itemCode').value = '';
+                    document.getElementById('itemName').value = '';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to generate QR code. Make sure backend is running.');
+            }
+        }
+
+        function addQRToGrid(code, name, imageData) {
+            const card = document.createElement('div');
+            card.className = 'qr-card';
+            card.innerHTML = `
+                <h3>${name || 'Unnamed Item'}</h3>
+                <p><strong>Code:</strong> ${code}</p>
+                <img src="${imageData}" alt="QR Code for ${code}">
+                <p style="font-size: 12px; color: #999;">Scan to borrow/return</p>
+            `;
+            document.getElementById('qrGrid').appendChild(card);
+        }
+
+        function printQR() {
+            if (document.getElementById('qrGrid').children.length === 0) {
+                alert('No QR codes to print. Generate some first!');
+                return;
+            }
+            window.print();
+        }
+
+        function clearAll() {
+            if (confirm('Clear all generated QR codes?')) {
+                document.getElementById('qrGrid').innerHTML = '';
+            }
+        }
+
+        // Allow Enter key to submit login
+        document.getElementById('loginPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+    </script>
+</body>
+</html>
