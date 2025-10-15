@@ -1,147 +1,191 @@
 import express from "express";
-import Transaction from "../models/transaction.js";
-import Item from "../models/item.js";
+import Transaction from "../models/Transaction.js";
+import Item from "../models/Item.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-//  Scan QR to borrow item
-router.post("/borrow", protect, async (req, res) => {
+// ⚠️ IMPORTANT: Specific routes MUST come before parameterized routes like /:id
+
+// Get user's transactions (Protected) - MOVED BEFORE GET /
+router.get('/my-transactions', protect, async (req, res) => {
   try {
-    const { qrCode } = req.body; // Student scans physical QR code
-    
-    if (!qrCode) {
-      return res.status(400).json({ message: "QR code is required" });
+    const transactions = await Transaction.find({ user: req.user.userId })
+      .populate('item', 'name itemId category')
+      .sort({ borrowDate: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Get my transactions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get active borrowings (Protected) - MOVED BEFORE GET /
+router.get('/active', protect, async (req, res) => {
+  try {
+    const query = req.user.role === 'admin' 
+      ? { status: 'active' }
+      : { user: req.user.userId, status: 'active' };
+
+    const transactions = await Transaction.find(query)
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category')
+      .sort({ borrowDate: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Get active transactions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get overdue transactions (Admin only) - MOVED BEFORE GET /
+router.get('/overdue', protect, adminOnly, async (req, res) => {
+  try {
+    const transactions = await Transaction.find({
+      status: 'active',
+      dueDate: { $lt: new Date() }
+    })
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category')
+      .sort({ dueDate: 1 });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Get overdue transactions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all transactions (Admin only) - Root path
+router.get('/', protect, adminOnly, async (req, res) => {
+  try {
+    const transactions = await Transaction.find()
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category')
+      .sort({ borrowDate: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Get transactions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get transaction by ID (Protected) - MUST BE AFTER specific routes
+router.get('/:id', protect, async (req, res) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id)
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category');
+
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    // Find item by scanned QR code
-    const item = await Item.findOne({ qrCode });
+    // Check access
+    if (transaction.user._id.toString() !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
 
+    res.json(transaction);
+  } catch (error) {
+    console.error('Get transaction error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Borrow item (Protected - student/faculty)
+router.post('/borrow', protect, async (req, res) => {
+  try {
+    const { itemId } = req.body;
+
+    if (!itemId) {
+      return res.status(400).json({ message: 'Item ID is required' });
+    }
+
+    // Check if item exists and is available
+    const item = await Item.findById(itemId);
     if (!item) {
-      return res.status(404).json({ message: "Item not found. Invalid QR code." });
-    }
-    
-    if (!item.available) {
-      return res.status(400).json({ 
-        message: "Item already borrowed",
-        borrowedBy: item.lastBorrowedBy
-      });
+      return res.status(404).json({ message: 'Item not found' });
     }
 
-    if (item.condition === "Under Maintenance") {
-      return res.status(400).json({ message: "Item is under maintenance" });
+    if (item.status !== 'available') {
+      return res.status(400).json({ message: 'Item is not available' });
     }
 
     // Create transaction
     const transaction = new Transaction({
-      userId: req.user.id,
-      itemId: item._id,
+      user: req.user.userId,
+      item: itemId,
+      borrowDate: new Date(),
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      status: 'active'
     });
+
     await transaction.save();
 
-    // Update item status
-    item.available = false;
-    item.condition = "In Use";
-    item.lastBorrowedBy = req.user.id;
-    item.lastBorrowedAt = new Date();
-    await item.save();
+    // Update item status ONLY
+    await Item.findByIdAndUpdate(
+      itemId,
+      { status: 'borrowed' },
+      { new: true }
+    );
 
-    res.status(201).json({ 
-      message: `Item borrowed successfully. Please place in compartment ${item.compartmentNumber || 'assigned'}`, 
-      transaction,
-      item: {
-        _id: item._id,
-        name: item.name,
-        compartmentNumber: item.compartmentNumber,
-        qrCode: item.qrCode
-      },
-      //  Signal to unlock cupboard (for hardware integration)
-      unlockCompartment: item.compartmentNumber
+    // Populate and return
+    const populatedTransaction = await Transaction.findById(transaction._id)
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category');
+
+    res.status(201).json({
+      message: 'Item borrowed successfully',
+      transaction: populatedTransaction
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error('Borrow error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Scan QR to return item
-router.post("/return", protect, async (req, res) => {
+// Return item (Protected)
+router.post('/return/:transactionId', protect, async (req, res) => {
   try {
-    const { qrCode } = req.body; // Student scans physical QR code
-    
-    if (!qrCode) {
-      return res.status(400).json({ message: "QR code is required" });
-    }
+    const transaction = await Transaction.findById(req.params.transactionId);
 
-    // Find item by scanned QR code
-    const item = await Item.findOne({ qrCode });
-
-    if (!item) {
-      return res.status(404).json({ message: "Item not found. Invalid QR code." });
-    }
-
-    // Find active transaction for this user and item
-    const transaction = await Transaction.findOne({ 
-      itemId: item._id,
-      userId: req.user.id,
-      status: "borrowed" 
-    });
-    
     if (!transaction) {
-      return res.status(400).json({ 
-        message: "No active borrow found. You haven't borrowed this item or it's already returned." 
-      });
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    // Check if user owns this transaction or is admin
+    if (transaction.user.toString() !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // Update transaction
-    transaction.status = "returned";
-    transaction.returnedAt = new Date();
+    transaction.returnDate = new Date();
+    transaction.status = 'returned';
     await transaction.save();
 
-    // Update item status
-    item.available = true;
-    item.condition = "Available";
-    await item.save();
+    // Update item status ONLY
+    await Item.findByIdAndUpdate(
+      transaction.item,
+      { status: 'available' },
+      { new: true }
+    );
 
-    res.json({ 
-      message: `Item returned successfully to compartment ${item.compartmentNumber || 'default'}`, 
-      transaction,
-      item: {
-        _id: item._id,
-        name: item.name,
-        compartmentNumber: item.compartmentNumber
-      },
-      //  Signal to unlock cupboard for return (for hardware integration)
-      unlockCompartment: item.compartmentNumber
+    // Populate and return
+    const populatedTransaction = await Transaction.findById(transaction._id)
+      .populate('user', 'name email')
+      .populate('item', 'name itemId category');
+
+    res.json({
+      message: 'Item returned successfully',
+      transaction: populatedTransaction
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-//  Get user's transaction history
-router.get("/history", protect, async (req, res) => {
-  try {
-    const transactions = await Transaction.find({ userId: req.user.id })
-      .populate("itemId", "name qrCode compartmentNumber")
-      .sort({ borrowedAt: -1 });
-    
-    res.json(transactions);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-//  Get all transactions (Admin only)
-router.get("/all", protect, adminOnly, async (req, res) => {
-  try {
-    const transactions = await Transaction.find()
-      .populate("userId", "name email")
-      .populate("itemId", "name qrCode")
-      .sort({ borrowedAt: -1 });
-    
-    res.json(transactions);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error('Return error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

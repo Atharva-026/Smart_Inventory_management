@@ -1,20 +1,40 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 const itemSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  description: String,
-  qrCode: { type: String, required: true, unique: true }, //  Must match physical QR on item
-  compartmentNumber: { type: Number }, // Which locker compartment
-  available: { type: Boolean, default: true },
-  condition: { 
-    type: String, 
-    enum: ["Available", "In Use", "Under Maintenance"], 
-    default: "Available" 
+  itemId: {
+    type: String,
+    required: [true, 'Item ID is required'],
+    unique: true
   },
-  lastBorrowedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-  lastBorrowedAt: { type: Date }
-}, { timestamps: true });
+  name: {
+    type: String,
+    required: [true, 'Item name is required']
+  },
+  category: {
+    type: String,
+    required: [true, 'Category is required']
+  },
+  description: {
+    type: String
+  },
+  status: {
+    type: String,
+    enum: ['available', 'borrowed', 'maintenance', 'damaged'],
+    default: 'available'
+  },
+  quantity: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+  qrCode: {
+    type: String,
+    unique: true,
+    sparse: true  // ← Allow null values to be unique
+    // Remove required: true
+  }
+}, {
+  timestamps: true
+});
 
-const Item = mongoose.model("Item", itemSchema);
-
-export default Item;
+export default mongoose.model('Item', itemSchema);
