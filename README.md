@@ -1,227 +1,195 @@
-📦 Smart Inventory Management System – Mechanical Lab Workshops
+Smart Inventory Management System – Mechanical Lab Workshops
 
-A full-stack MERN + IoT–powered platform for automating tool issuing and returning inside Mechanical Engineering workshops.
-This system replaces manual logbook entries with QR-based tracking, role-based dashboards, email verification, analytics, and optional ESP32 locker automation.
+A full-stack MERN-based Inventory Management solution designed for Mechanical Engineering labs.
+The system automates tool issuing and returning using QR codes, real-time tracking, email verification, data analytics, and role-based dashboards. It removes manual logbooks and introduces a modern digital workflow suitable for college workshops.
 
-🚀 Overview
+Overview
 
-Mechanical workshops face issues like:
+Mechanical workshops often face issues such as untracked tools, lost equipment, manual logbook errors, and lack of usage insights.
+This Smart Inventory Management System solves these challenges by digitizing inventory operations and providing automated, transparent, and secure tool management.
 
-Lost or untracked tools
+The system supports three roles:
 
-Manual logbook delays
+Student – Scan and borrow/return tools
 
-No transparent record
+Faculty – Manage students and monitor their activity
 
-Difficulty in auditing usage
+Admin – Manage faculty, tools, stock, analytics, and system users
 
-No insights on tool demand or damage
+Key Features
+1. QR Code Generation
 
-The Smart Inventory Management System solves these through digitalization, automation, and real-time monitoring using QR codes.
+Admin generates unique QR codes for each tool.
 
-🧩 Key Features
-✅ 1. QR Code Generation
+Codes can be downloaded as PNG or PDF.
 
-Admin generates QR codes for each tool.
+Each QR includes Tool ID, Name, and optional Locker ID.
 
-Downloadable as PNG/PDF.
+2. QR Code Scanning
 
-Label tools for quick scanning.
+Students scan QR to borrow or return tools.
 
-Includes Tool ID, Tool Name, Category, Locker ID (optional ESP32).
+The system validates availability and previous transactions.
 
-✅ 2. QR Code Scanning
+Prevents duplicate or invalid scans.
 
-Students scan QR codes to borrow/return tools.
+Every action is logged in MongoDB.
 
-System validates tool status.
+Role-Based Dashboards
+Student Dashboard
 
-Prevents duplicate or invalid transactions.
+Borrow and return tools using QR scanning
 
-Fully logged in MongoDB.
+View personal tool usage history
 
-🎛 Role-Based Dashboards
-🎓 Student Dashboard
+Manage profile
 
-Borrow and return tools via QR scanning
+Check tool borrowing status
 
-View personal tool history
+Faculty Dashboard
 
-Update profile
+Manage student accounts
 
-Check tool status
+View all students and their transaction history
 
-Receive alerts if tool is overdue (optional)
+Track tool usage by students
 
-🧑‍🏫 Faculty Dashboard
+Export logs (CSV/PDF)
 
-Faculty role responsibilities:
+Admin Dashboard
 
-✔ Can manage students under them
-✔ Add or remove student accounts
-✔ View student borrowing history
-✔ Monitor all transactions
-✔ Download logs in CSV/PDF
-✔ View tool usage patterns within their group
+Manage faculty accounts
 
-Faculty do NOT manage tools or stock.
+Manage tool inventory and stock
 
-🛠 Admin Dashboard
+Add/Edit/Delete tools
 
-Admin role responsibilities (full control):
+Generate QR codes
 
-✔ Manage Faculty Accounts (Add/Edit/Delete)
-✔ Manage Inventory (Tools & Stocks)
-✔ Add/Edit/Delete tools
-✔ Generate QR codes
-✔ View ALL transactions
-✔ View complete system analytics
-✔ Download full reports (PDF/CSV)
-✔ Handle email verification system
-✔ Manage roles & system users
-✔ ESP32 locker integration control
+View full analytics
 
-Admin controls the entire system.
+Export complete system reports
 
-📊 3. System Analytics (Admin Only)
+Manage email verification system
 
-Analytics include:
+Control hardware integrations (ESP32 lockers)
+
+System Analytics (Admin)
+
+The analytics module includes:
 
 Most borrowed tools
 
-Least used items
+Least used tools
 
-Daily/weekly borrowing frequency
+Daily/weekly borrowing trends
 
-Tool availability comparison
+Tool availability insights
 
-Stock analysis
+Stock movement analysis
 
-Student/faculty usage patterns
+Student and faculty usage patterns
 
-Graphs allow labs to:
+Graphs help identify demand patterns, tool shortage risks, and budgeting requirements.
 
-Identify heavily used tools
+Data Export (PDF & CSV)
 
-Predict damage or replacement needs
+The system supports exporting data in:
 
-Improve budgeting
+CSV (Excel compatible)
 
-Optimize inventory planning
+PDF (for reports and documentation)
 
-📄 4. Export Data (PDF & CSV)
-
-Available for Admin and Faculty:
-
-Tool stock list
+Files available for export:
 
 Transaction logs
 
+Tool lists
+
 Student activity
 
-Department usage
+Faculty usage reports
 
-Analytics summary
+Analytics data summaries
 
-Supports:
+Email Verification
 
-CSV for Excel
+To ensure account authenticity, the platform uses:
 
-PDF for report submission
+OTP-based email verification
 
-✉️ 5. Email Verification
+Gmail App Passwords (Nodemailer integration)
 
-For secure login:
+Verification for students, faculty, and admins
 
-OTP-based verification via Gmail App Password
+This prevents fake registrations and enhances system security.
 
-Nodemailer integration
-
-Avoids fake registrations
-
-Used for students, faculty, and admins
-
-🔐 6. Security Features
+Security Features
 
 JWT-based authentication
 
 Role-based access control (RBAC)
 
-Password hashing using bcrypt
+Bcrypt password hashing
 
-Protected backend routes
+Protected API routes
 
-Form-level validation
+Input and form validation
 
-Secure API layer
+Workflow (Tool Borrow/Return)
 
-🔄 How It Works (Workflow)
+Admin adds a tool and generates its QR code.
 
-Admin uploads tools → QR codes generated
+Faculty manages student accounts and assigns access.
 
-Faculty manages students (add/remove)
+Student logs in and scans the QR code.
 
-Student scans QR to borrow a tool
+Backend checks availability and validates the transaction.
 
-Backend checks availability
+If valid, tool gets issued and timestamp stored.
 
-If available → tool issued, time logged
+Student returns the tool by scanning again.
 
-Student scans again to return
+Database updates the status instantly.
 
-Database updates instantly
+Faculty monitors student activity.
 
-Admin sees analytics, tool usage, and stock levels
+Admin views analytics and downloads reports.
 
-Faculty monitors student activity
+Optional Hardware Workflow:
 
-Admin exports CSV/PDF reports anytime
+ESP32 unlocks the tool locker if scan is approved.
 
-Optional IoT:
+Technology Stack
 
-ESP32 opens/closes lockers on successful scan validation.
+Frontend: React.js, Axios, React Router
+Backend: Node.js, Express.js, JWT, Nodemailer
+Database: MongoDB
+Hardware (Optional): ESP32 microcontroller with servo/solenoid locks
 
-🏗 Tech Stack
-
-Frontend: React, Axios, React Router
-Backend: Node.js, Express.js, MongoDB, JWT, Nodemailer
-Database: MongoDB (Atlas Compatible)
-Hardware (Optional): ESP32 + Servo/Solenoid Lock
-
-🧩 Modules Included
+Modules Included
 
 Authentication & Email Verification
 
-QR Generator & Scanner
+QR Code Generator
+
+QR Scanner Module
 
 Tool Inventory Module
 
-Student Management (Faculty Role)
+Student Management Module (Faculty)
 
-Faculty Management (Admin Role)
+Faculty Management Module (Admin)
 
 Analytics Dashboard
 
-Transaction Log Module
-
-PDF/CSV Exporter
+Reports Export (PDF/CSV)
 
 ESP32 Locker Control (Optional)
 
-📝 Conclusion
+Conclusion
 
-This system modernizes mechanical workshop tool management by providing:
+The Smart Inventory Management System modernizes mechanical workshop operations by providing transparency, automation, and real-time tracking.
+Its role-based workflow, analytics, QR-based scanning, and data export capabilities make it a complete solution for college labs and engineering departments.
 
-Full transparency
-
-Automated logs
-
-Real-time tracking
-
-Role-based permissions
-
-Data-driven insights
-
-Secure access
-
-It is scalable and suitable for any engineering department or institution.
+It improves accountability, reduces tool loss, saves manual work, and offers data-driven insights for better inventory planning.
