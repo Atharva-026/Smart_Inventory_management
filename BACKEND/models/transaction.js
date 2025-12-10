@@ -3,12 +3,12 @@ import mongoose from 'mongoose';
 const transactionSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',  // ← Make sure this matches your User model name
+    ref: 'User',
     required: true
   },
   item: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Item',  // ← Make sure this matches your Item model name
+    ref: 'Item',
     required: true
   },
   borrowDate: {
@@ -31,5 +31,10 @@ const transactionSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Add indexes for better query performance
+transactionSchema.index({ user: 1, status: 1 });
+transactionSchema.index({ item: 1 });
+transactionSchema.index({ borrowDate: -1 });
 
 export default mongoose.model('Transaction', transactionSchema);

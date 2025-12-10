@@ -1,8 +1,17 @@
 import express from 'express';
-import Item from '../models/Item.js';
+import Item from '../models/item.js';
 import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Middleware to check if user is admin or faculty
+const adminOrFaculty = (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'faculty') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Admin or Faculty only.' });
+  }
+};
 
 // Helper function to generate QR code value
 const generateQRCode = (itemId) => {
@@ -12,7 +21,7 @@ const generateQRCode = (itemId) => {
 // Get all items (Public)
 router.get('/', async (req, res) => {
   try {
-    const items = await Item.find();
+    const items = await Item.find().populate('addedBy', 'name email');
     res.json(items);
   } catch (error) {
     console.error('Get items error:', error);
@@ -20,10 +29,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get items added by me (Faculty)
+router.get('/my-items', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'faculty' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const items = req.user.role === 'admin' 
+      ? await Item.find().populate('addedBy', 'name email')
+      : await Item.find({ addedBy: req.user.userId }).populate('addedBy', 'name email');
+
+    res.json(items);
+  } catch (error) {
+    console.error('Get my items error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get item by ID (Public)
 router.get('/:id', async (req, res) => {
   try {
-    const item = await Item.findById(req.params.id);
+    const item = await Item.findById(req.params.id).populate('addedBy', 'name email');
     if (!item) {
       return res.status(404).json({ message: 'Item not found' });
     }
@@ -35,41 +62,42 @@ router.get('/:id', async (req, res) => {
 });
 
 // Get item by QR code (Protected)
-router.get('/qr/:qrCode', protect, async (req, res) => {
+router.get('/qr/:code', protect, async (req, res) => {
   try {
-    const item = await Item.findOne({ qrCode: req.params.qrCode });
+    const code = req.params.code;
+    // try to find by qrCode first, then by itemId
+    let item = await Item.findOne({ qrCode: code });
+    if (!item) {
+      item = await Item.findOne({ itemId: code });
+    }
     if (!item) {
       return res.status(404).json({ message: 'Item not found' });
     }
     res.json(item);
   } catch (error) {
     console.error('Get item by QR error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Create item (Admin only)
-router.post('/', protect, adminOnly, async (req, res) => {
+// Create item (Admin or Faculty)
+router.post('/', protect, adminOrFaculty, async (req, res) => {
   try {
-    const { itemId, name, category, description, status, quantity } = req.body;
+    const { itemId, name, category, description, status, quantity, department } = req.body;
 
-    // Validate required fields
     if (!itemId || !name || !category) {
       return res.status(400).json({ 
         message: 'Item ID, Name, and Category are required' 
       });
     }
 
-    // Check if itemId already exists
     const existingItem = await Item.findOne({ itemId });
     if (existingItem) {
       return res.status(400).json({ message: 'Item ID already exists' });
     }
 
-    // Generate QR code automatically
     const qrCode = generateQRCode(itemId);
 
-    // Create item
     const item = new Item({
       itemId,
       name,
@@ -77,19 +105,22 @@ router.post('/', protect, adminOnly, async (req, res) => {
       description: description || '',
       status: status || 'available',
       quantity: quantity || 1,
-      qrCode  // ← Auto-generated
+      qrCode,
+      addedBy: req.user.userId,
+      department: department || null
     });
 
     await item.save();
 
+    const populatedItem = await Item.findById(item._id).populate('addedBy', 'name email');
+
     res.status(201).json({
       message: 'Item created successfully',
-      item
+      item: populatedItem
     });
   } catch (error) {
     console.error('Create item error:', error);
     
-    // Handle duplicate key error
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({ 
@@ -101,38 +132,44 @@ router.post('/', protect, adminOnly, async (req, res) => {
   }
 });
 
-// Update item (Admin only)
-router.put('/:id', protect, adminOnly, async (req, res) => {
+// Update item (Admin or Faculty who added it)
+router.put('/:id', protect, adminOrFaculty, async (req, res) => {
   try {
-    const { itemId, name, category, description, status, quantity } = req.body;
+    const item = await Item.findById(req.params.id);
+    
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
 
-    // Don't allow updating itemId or qrCode
+    // Check ownership (Faculty can only edit their own items)
+    if (req.user.role === 'faculty' && item.addedBy.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'You can only edit items you added' });
+    }
+
+    const { name, category, description, status, quantity, department } = req.body;
+
     const updateData = {
       name,
       category,
       description,
       status,
-      quantity
+      quantity,
+      department
     };
 
-    // Remove undefined fields
     Object.keys(updateData).forEach(key => 
       updateData[key] === undefined && delete updateData[key]
     );
 
-    const item = await Item.findByIdAndUpdate(
+    const updatedItem = await Item.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
-    );
-
-    if (!item) {
-      return res.status(404).json({ message: 'Item not found' });
-    }
+    ).populate('addedBy', 'name email');
 
     res.json({
       message: 'Item updated successfully',
-      item
+      item: updatedItem
     });
   } catch (error) {
     console.error('Update item error:', error);
@@ -140,13 +177,21 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
   }
 });
 
-// Delete item (Admin only)
-router.delete('/:id', protect, adminOnly, async (req, res) => {
+// Delete item (Admin or Faculty who added it)
+router.delete('/:id', protect, adminOrFaculty, async (req, res) => {
   try {
-    const item = await Item.findByIdAndDelete(req.params.id);
+    const item = await Item.findById(req.params.id);
+    
     if (!item) {
       return res.status(404).json({ message: 'Item not found' });
     }
+
+    // Check ownership
+    if (req.user.role === 'faculty' && item.addedBy.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'You can only delete items you added' });
+    }
+
+    await item.deleteOne();
 
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {
@@ -155,8 +200,8 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
   }
 });
 
-// Get QR code for item (Admin)
-router.get('/:id/qr', protect, adminOnly, async (req, res) => {
+// Get QR code for item (Admin or Faculty)
+router.get('/:id/qr', protect, adminOrFaculty, async (req, res) => {
   try {
     const item = await Item.findById(req.params.id);
     if (!item) {

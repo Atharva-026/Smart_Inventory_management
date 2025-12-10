@@ -27,6 +27,17 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  // ✅ ADD THESE FIELDS
+  invitedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  invitationCode: {
+    type: String
+  },
+  department: {
+    type: String
   }
 }, {
   timestamps: true

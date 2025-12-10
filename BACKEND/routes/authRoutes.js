@@ -2,7 +2,8 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { protect } from '../middleware/authMiddleware.js';
+import Invitation from '../models/Invitation.js';
+import { protect, adminOnly } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -11,10 +12,45 @@ router.get('/test', (req, res) => {
   res.json({ message: 'Auth route is working!' });
 });
 
-// Register
+// Register Student (With Invitation Code)
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, role } = req.body;
+    const { name, email, password, phone, invitationCode } = req.body;
+
+    // Validate invitation code
+    if (!invitationCode) {
+      return res.status(400).json({ 
+        message: 'Invitation code is required for student registration' 
+      });
+    }
+
+    // Find invitation
+    const invitation = await Invitation.findOne({ 
+      code: invitationCode.toUpperCase(),
+      status: 'pending'
+    });
+
+    if (!invitation) {
+      return res.status(400).json({ 
+        message: 'Invalid or expired invitation code' 
+      });
+    }
+
+    // Check if invitation is for this email
+    if (invitation.email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({ 
+        message: 'This invitation code is not for your email address' 
+      });
+    }
+
+    // Check if expired
+    if (invitation.expiresAt < new Date()) {
+      invitation.status = 'expired';
+      await invitation.save();
+      return res.status(400).json({ 
+        message: 'Invitation code has expired' 
+      });
+    }
 
     // Check if user exists
     let user = await User.findOne({ email });
@@ -32,10 +68,17 @@ router.post('/register', async (req, res) => {
       email,
       password: hashedPassword,
       phone,
-      role: role || 'student'
+      role: 'student',
+      invitedBy: invitation.invitedBy,
+      invitationCode: invitationCode.toUpperCase()
     });
 
     await user.save();
+
+    // Update invitation status
+    invitation.status = 'accepted';
+    invitation.usedAt = new Date();
+    await invitation.save();
 
     // Create token
     const token = jwt.sign(
@@ -45,7 +88,7 @@ router.post('/register', async (req, res) => {
     );
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'Student registered successfully',
       token,
       user: {
         id: user._id,
@@ -60,6 +103,49 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Register Faculty (Admin Only)
+router.post('/register-faculty', protect, adminOnly, async (req, res) => {
+  try {
+    const { name, email, password, phone, department } = req.body;
+
+    // Check if user exists
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create faculty user
+    user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      phone,
+      role: 'faculty',
+      department: department || null
+    });
+
+    await user.save();
+
+    res.status(201).json({
+      message: 'Faculty registered successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department
+      }
+    });
+  } catch (error) {
+    console.error('Register faculty error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Login
 router.post('/login', async (req, res) => {
   try {
@@ -69,6 +155,11 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Your account has been deactivated' });
     }
 
     // Check password
@@ -103,7 +194,9 @@ router.post('/login', async (req, res) => {
 // Get current user profile (Protected)
 router.get('/profile', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password');
+    const user = await User.findById(req.user.userId)
+      .select('-password')
+      .populate('invitedBy', 'name email');
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -119,12 +212,12 @@ router.get('/profile', protect, async (req, res) => {
 // Update profile (Protected)
 router.put('/profile', protect, async (req, res) => {
   try {
-    const { name, phone } = req.body;
+    const { name, phone, department } = req.body;
 
-    // Don't allow email and password changes through this route
     const updateData = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
+    if (department !== undefined) updateData.department = department;
 
     const user = await User.findByIdAndUpdate(
       req.user.userId,
@@ -163,19 +256,16 @@ router.put('/change-password', protect, async (req, res) => {
       });
     }
 
-    // Get user with password
     const user = await User.findById(req.user.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Check current password
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Current password is incorrect' });
     }
 
-    // Hash new password
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
@@ -183,6 +273,25 @@ router.put('/change-password', protect, async (req, res) => {
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get my students (Faculty only)
+router.get('/my-students', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'faculty') {
+      return res.status(403).json({ message: 'Access denied. Faculty only.' });
+    }
+
+    const students = await User.find({ 
+      invitedBy: req.user.userId,
+      role: 'student'
+    }).select('-password').sort({ createdAt: -1 });
+
+    res.json(students);
+  } catch (error) {
+    console.error('Get students error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

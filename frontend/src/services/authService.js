@@ -1,9 +1,15 @@
 import API from './api';
 
 const authService = {
-  // Register new user
+  // Register new student (with invitation code)
   register: async (userData) => {
     const response = await API.post('/auth/register', userData);
+    return response.data;
+  },
+
+  // Register faculty (Admin only)
+  registerFaculty: async (facultyData) => {
+    const response = await API.post('/auth/register-faculty', facultyData);
     return response.data;
   },
 
@@ -28,6 +34,12 @@ const authService = {
   // Change password
   changePassword: async (passwordData) => {
     const response = await API.put('/auth/change-password', passwordData);
+    return response.data;
+  },
+
+  // Get my students (Faculty only)
+  getMyStudents: async () => {
+    const response = await API.get('/auth/my-students');
     return response.data;
   }
 };

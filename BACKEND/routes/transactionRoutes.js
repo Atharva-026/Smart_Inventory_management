@@ -1,6 +1,6 @@
 import express from "express";
-import Transaction from "../models/Transaction.js";
-import Item from "../models/Item.js";
+import Transaction from "../models/transaction.js";
+import Item from "../models/item.js";
 import { protect, adminOnly } from "../middleware/authMiddleware.js";
 
 const router = express.Router();

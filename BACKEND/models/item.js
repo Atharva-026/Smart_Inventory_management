@@ -30,8 +30,17 @@ const itemSchema = new mongoose.Schema({
   qrCode: {
     type: String,
     unique: true,
-    sparse: true  // ← Allow null values to be unique
-    // Remove required: true
+    sparse: true
+  },
+  // NEW FIELD - Track which faculty added this item
+  addedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  department: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

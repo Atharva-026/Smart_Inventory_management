@@ -13,10 +13,21 @@ const inventoryService = {
     return response.data;
   },
 
-  // Get item by QR code
-  getItemByQR: async (qrCode) => {
-    const response = await API.get(`/inventory/qr/${qrCode}`);
-    return response.data;
+  // Get item by QR code / identifier
+  getItemByQR: async (qrData) => {
+    // encode to avoid characters breaking the URL
+    const encoded = encodeURIComponent(qrData);
+    try {
+      const response = await API.get(`/inventory/qr/${encoded}`);
+      return response.data;
+    } catch (err) {
+      // rethrow with status for caller to inspect
+      const status = err.response?.status;
+      const message = err.response?.data?.message || err.message;
+      const error = new Error(message);
+      error.status = status;
+      throw error;
+    }
   },
 
   // Create new item (Admin)

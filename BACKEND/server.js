@@ -8,7 +8,8 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import itemRoutes from "./routes/itemRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
-import userRoutes from "./routes/userRoutes.js";  // ← Add this
+import userRoutes from "./routes/userRoutes.js";
+import invitationRoutes from "./routes/invitationRoutes.js";  // ← NEW
 import qrRoutes from "./routes/qrRoutes.js";
 
 dotenv.config();
@@ -27,11 +28,12 @@ app.use(morgan("dev"));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes - Match frontend expectations
+// Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/inventory", itemRoutes);      // ← Changed from /api/items
+app.use("/api/inventory", itemRoutes);
 app.use("/api/transactions", transactionRoutes);
-app.use("/api/users", userRoutes);          // ← Add this
+app.use("/api/users", userRoutes);
+app.use("/api/invitations", invitationRoutes);  // ← NEW
 app.use("/api/qr", qrRoutes);
 
 // Test Route

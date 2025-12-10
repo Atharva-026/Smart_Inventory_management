@@ -42,6 +42,10 @@ export const AuthProvider = ({ children }) => {
     return user?.role === 'admin';
   };
 
+  const isFaculty = () => {
+    return user?.role === 'faculty';
+  };
+
   const isStudent = () => {
     return user?.role === 'student';
   };
@@ -52,8 +56,9 @@ export const AuthProvider = ({ children }) => {
       login, 
       logout, 
       loading, 
-      isAdmin, 
-      isStudent 
+      isAdmin,
+      isFaculty,
+      isStudent
     }}>
       {children}
     </AuthContext.Provider>

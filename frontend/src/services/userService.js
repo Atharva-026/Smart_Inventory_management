@@ -35,6 +35,18 @@ const userService = {
   toggleUserStatus: async (id) => {
     const response = await API.patch(`/users/${id}/toggle-status`);
     return response.data;
+  },
+
+  // Get my students (Faculty)
+  getMyStudents: async () => {
+    const response = await API.get('/users/my-students');
+    return response.data;
+  },
+
+  // Delete student (Faculty)
+  deleteStudent: async (studentId) => {
+    const response = await API.delete(`/users/my-students/${studentId}`);
+    return response.data;
   }
 };
 
